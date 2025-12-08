@@ -16,14 +16,155 @@ const LandingPage = () => {
   const featuresRef = useRef<HTMLDivElement>(null);
   const statsRef = useRef<HTMLDivElement>(null);
 
-  // Mock Data based on the README strategies and "filtered_matches" sheet concept
-  const liveMatches = [
-    { sport: "🏒 Hockey", match: "Bruins vs Leafs", pick: "Bruins (OT)", prob: "82%", status: "WIN", strategy: "Zona de Oro" },
-    { sport: "⚽ Fútbol", match: "Real Madrid vs Betis", pick: "Local", prob: "65%", status: "WIN", strategy: "1X2 Value" },
-    { sport: "🎾 Tenis", match: "Alcaraz vs Sinner", pick: "Alcaraz", prob: "74%", status: "PENDING", strategy: "Rango 70-76" },
-    { sport: "🏀 NBA", match: "Lakers vs Celtics", pick: "Celtics", prob: "72%", status: "WIN", strategy: "Elite Basket" },
-    { sport: "🥊 MMA", match: "Pereira vs Hill", pick: "Pereira", prob: "68%", status: "WIN", strategy: "Fight Night" },
-  ];
+  const [liveMatches, setLiveMatches] = useState<any[]>([]);
+  const [sportStats, setSportStats] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  // Helper function to parse CSV line
+  const parseCSVLine = (line: string): string[] => {
+    const result = [];
+    let cell = '';
+    let quote = false;
+
+    for (let i = 0; i < line.length; i++) {
+      const char = line[i];
+      if (char === '"') {
+        quote = !quote;
+      } else if (char === ',' && !quote) {
+        result.push(cell);
+        cell = '';
+      } else {
+        cell += char;
+      }
+    }
+    result.push(cell);
+    return result.map(c => c.replace(/^"|"$/g, '').trim()); // Clean quotes
+  };
+
+  useEffect(() => {
+    const fetchMatches = async () => {
+      try {
+        const response = await fetch('https://docs.google.com/spreadsheets/d/1MMfzYOEgcbYY-nEGiiXha8cFlBMX-Cv64DLGnoMFSYk/gviz/tq?tqx=out:csv&sheet=filtered_matches');
+        const text = await response.text();
+        const lines = text.split('\n').filter(l => l.trim());
+
+        // Skip header
+        const data = lines.slice(1).map(parseCSVLine);
+
+        // Process data
+        const matchesBySport: Record<string, any[]> = {};
+        const allMatches: any[] = [];
+
+        // Calculate Yesterday's Date
+        const today = new Date();
+        const yesterday = new Date(today);
+        yesterday.setDate(yesterday.getDate() - 1);
+        const yesterdayStr = yesterday.toISOString().split('T')[0];
+
+        data.forEach(row => {
+          if (row.length < 5) return;
+
+          /* Column Mapping based on CSV inspection:
+             0: id, 1: sport, 2: league, 3: home, 4: away, 5: date, 6: time, 7: strategy ...
+             11: prob_over, 12: prob_under, 8: prob_1, 10: prob_2, 16: status
+          */
+          const sport = row[1];
+          const home = row[3];
+          const away = row[4];
+          const date = row[5];
+          const time = row[6]; // Map time
+          const strategy = row[7];
+          const status = row[16]; // WON, LOST, CANCELLED
+
+          let pick = '';
+          let prob = '';
+
+          if (strategy.includes('OVER')) {
+            pick = 'Over 2.5';
+            prob = row[11];
+          } else if (strategy.includes('UNDER')) {
+            pick = 'Under 2.5';
+            prob = row[12];
+          } else if (strategy.includes('HOME')) {
+            pick = home;
+            prob = row[8];
+          } else if (strategy.includes('AWAY')) {
+            pick = away;
+            prob = row[10];
+          } else {
+            pick = 'N/A';
+            prob = '0';
+          }
+
+          const matchObj = {
+            originalSport: sport,
+            date,
+            time,
+            match: `${home} vs ${away}`,
+            pick,
+            prob: `${prob}%`,
+            status: status === 'WON' ? 'WIN' : status === 'LOST' ? 'LOSS' : status === 'CANCELLED' ? 'CANCELLED' : 'PENDING',
+            strategy: strategy.replace(/_/g, ' '),
+            league: row[2]
+          };
+
+          allMatches.push(matchObj);
+
+          if (!matchesBySport[sport]) matchesBySport[sport] = [];
+          matchesBySport[sport].push(matchObj);
+        });
+
+        const stats = Object.keys(matchesBySport).map(sport => {
+          const matches = matchesBySport[sport];
+          const completed = matches.filter(m => m.status === 'WIN' || m.status === 'LOSS');
+          const wins = completed.filter(m => m.status === 'WIN').length;
+          const total = completed.length;
+          const rate = total > 0 ? Math.round((wins / total) * 100) : 0;
+
+          let displayName = sport;
+          if (sport === 'futbol') displayName = "⚽ Fútbol";
+          if (sport === 'hockey') displayName = "🏒 Hockey";
+          if (sport === 'tenis') displayName = "🎾 Tenis";
+          if (sport === 'nba' || sport === 'basket' || sport === 'basketball') displayName = "🏀 Basket";
+          if (sport === 'mma') displayName = "🥊 MMA";
+          if (sport === 'nfl' || sport === 'american_football') displayName = "🏈 NFL";
+
+          return { sport: displayName, rate, total };
+        });
+
+        // Filter for Yesterday's Matches and select ONE per sport
+        const yesterdaysMatchesAll = allMatches.filter(m => m.date === yesterdayStr);
+
+        // Group by sport to pick one representative (e.g. the last one / most recent)
+        const yesterdaysMatchesBySport: Record<string, any> = {};
+        yesterdaysMatchesAll.forEach(m => {
+          yesterdaysMatchesBySport[m.originalSport] = m; // Overwrite to keep the last one of the day
+        });
+
+        const yesterdaysMatches = Object.values(yesterdaysMatchesBySport).map((m: any) => {
+          let displayName = m.originalSport;
+          if (m.originalSport === 'futbol') displayName = "⚽ Fútbol";
+          if (m.originalSport === 'hockey') displayName = "🏒 Hockey";
+          if (m.originalSport === 'tenis') displayName = "🎾 Tenis";
+          if (m.originalSport === 'nba' || m.originalSport === 'basket' || m.originalSport === 'basketball') displayName = "🏀 Basket";
+          if (m.originalSport === 'mma') displayName = "🥊 MMA";
+          if (m.originalSport === 'nfl' || m.originalSport === 'american_football') displayName = "🏈 NFL";
+
+          return { ...m, sport: displayName };
+        });
+
+        setLiveMatches(yesterdaysMatches);
+        setSportStats(stats);
+        setLoading(false);
+
+      } catch (error) {
+        console.error("Error fetching matches:", error);
+        setLoading(false);
+      }
+    };
+
+    fetchMatches();
+  }, []);
 
   useEffect(() => {
     const ctx = gsap.context(() => {
@@ -76,6 +217,31 @@ const LandingPage = () => {
 
   const openModal = () => setIsModalOpen(true);
   const closeModal = () => setIsModalOpen(false);
+
+  const PieChart = ({ percentage, color }: { percentage: number, color: string }) => {
+    const radius = 35;
+    const circumference = 2 * Math.PI * radius;
+    const dashArray = (percentage / 100) * circumference;
+
+    return (
+      <div className="relative w-32 h-32 flex items-center justify-center">
+        <svg width="100%" height="100%" viewBox="0 0 100 100" className="rotate-[-90deg]">
+          <circle cx="50" cy="50" r={radius} fill="none" stroke="#1e293b" strokeWidth="8" />
+          <circle
+            cx="50" cy="50" r={radius}
+            fill="none"
+            stroke={color}
+            strokeWidth="8"
+            strokeDasharray={`${dashArray} ${circumference}`}
+            strokeLinecap="round"
+          />
+        </svg>
+        <div className="absolute inset-0 flex flex-col items-center justify-center">
+          <span className="text-2xl font-bold text-white">{percentage}%</span>
+        </div>
+      </div>
+    );
+  };
 
   return (
     <div className="min-h-screen bg-slate-950 text-white font-sans selection:bg-emerald-500 selection:text-black overflow-x-hidden">
@@ -148,7 +314,7 @@ const LandingPage = () => {
       {/* Live Ticker Section */}
       <div className="w-full bg-slate-900/50 border-y border-slate-800 overflow-hidden py-3">
         <div className="flex animate-marquee whitespace-nowrap gap-8 text-sm font-mono text-slate-300">
-          {[...liveMatches, ...liveMatches].map((match, i) => (
+          {(liveMatches.length > 0 ? [...liveMatches, ...liveMatches] : Array(10).fill({ sport: "Cargando...", match: "...", prob: "...", status: "..." })).map((match, i) => (
             <div key={i} className="flex items-center gap-2">
               <span className="text-emerald-400">●</span>
               <span className="font-bold text-white">{match.sport}</span>: {match.match}
@@ -158,6 +324,34 @@ const LandingPage = () => {
           ))}
         </div>
       </div>
+
+      {/* Stats Section - New Pastel Charts */}
+      <section className="py-20 px-6 bg-slate-900/40">
+        <div className="container mx-auto">
+          <div className="text-center mb-16">
+            <h2 className="text-3xl md:text-5xl font-bold mb-4">Rendimiento Histórico</h2>
+            <p className="text-slate-400 max-w-2xl mx-auto">
+              Transparencia total en nuestros resultados. Tasas de acierto verificadas por deporte.
+            </p>
+          </div>
+
+          <div className="flex flex-wrap justify-center gap-10">
+            {sportStats.map((stat, i) => {
+              // Logic: Green if >= 50%, Red if < 50%
+              const color = stat.rate >= 50 ? "#4ade80" : "#f87171";
+
+              return (
+                <div key={i} className="flex flex-col items-center bg-slate-900 p-6 rounded-2xl border border-slate-800 w-48 hover:border-slate-600 transition-all">
+                  <h3 className="text-lg font-bold text-slate-300 mb-4">{stat.sport}</h3>
+                  <PieChart percentage={stat.rate} color={color} />
+                  <span className="text-xs text-slate-500 mt-4 font-mono">{stat.total} Picks</span>
+                </div>
+              )
+            })}
+            {loading && <div className="text-slate-500">Cargando estadísticas...</div>}
+          </div>
+        </div>
+      </section>
 
       {/* Value Proposition / Strategies */}
       <section className="py-24 px-6 relative">
@@ -270,6 +464,7 @@ const LandingPage = () => {
                   <thead className="text-xs text-slate-500 uppercase bg-slate-900/50">
                     <tr>
                       <th className="px-4 py-3 rounded-l-lg">Deporte</th>
+                      <th className="px-4 py-3">Fecha</th>
                       <th className="px-4 py-3">Partido</th>
                       <th className="px-4 py-3">Pick</th>
                       <th className="px-4 py-3">Prob. IA</th>
@@ -277,26 +472,57 @@ const LandingPage = () => {
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-800">
-                    {liveMatches.map((match, i) => (
-                      <tr key={i} className="hover:bg-slate-900/30 transition-colors">
-                        <td className="px-4 py-4 font-medium text-slate-300">{match.sport}</td>
-                        <td className="px-4 py-4 text-slate-400">{match.match}</td>
-                        <td className="px-4 py-4 font-bold text-white">{match.pick}</td>
-                        <td className="px-4 py-4">
-                          <span className={`px-2 py-1 rounded text-xs font-bold ${parseInt(match.prob) > 75 ? 'bg-emerald-950 text-emerald-400 border border-emerald-500/30' : 'bg-blue-950 text-blue-400 border border-blue-500/30'
-                            }`}>
-                            {match.prob}
-                          </span>
-                        </td>
-                        <td className="px-4 py-4">
-                          {match.status === 'WIN' ? (
-                            <span className="text-emerald-400 flex items-center gap-1"><CheckCircle2 className="w-3 h-3" /> Ganada</span>
-                          ) : (
-                            <span className="text-slate-500 flex items-center gap-1"><Activity className="w-3 h-3" /> En Juego</span>
-                          )}
-                        </td>
-                      </tr>
-                    ))}
+                    {loading ? (
+                      <tr><td colSpan={6} className="text-center py-6 text-slate-500">Cargando datos en tiempo real...</td></tr>
+                    ) : liveMatches.map((match, i) => {
+                      // Status Logic for UI
+                      let StatusBadge;
+                      const statusUpper = match.status?.toUpperCase() || '';
+
+                      if (statusUpper === 'WIN') {
+                        StatusBadge = <span className="text-emerald-400 flex items-center gap-1"><CheckCircle2 className="w-3 h-3" /> Ganada</span>;
+                      } else if (statusUpper === 'LOSS') {
+                        StatusBadge = <span className="text-red-400 flex items-center gap-1"><X className="w-3 h-3" /> Perdida</span>;
+                      } else if (statusUpper === 'CANCELLED') {
+                        StatusBadge = <span className="text-orange-400 flex items-center gap-1"><Activity className="w-3 h-3" /> Cancelada</span>;
+                      } else {
+                        // Logic for Pending/Scheduled
+                        // Ensure time format HH:MM for Date parsing
+                        const cleanTime = (match.time || '00:00').trim();
+                        const formattedTime = cleanTime.includes(':') && cleanTime.length < 5 ? `0${cleanTime}` : cleanTime;
+
+                        const matchDateTime = new Date(`${match.date}T${formattedTime}`);
+                        const now = new Date();
+                        const isFuture = matchDateTime > now;
+
+                        if (isFuture) {
+                          StatusBadge = <span className="text-blue-400 flex items-center gap-1"><Activity className="w-3 h-3" /> Programado</span>;
+                        } else {
+                          // Past match strictly PENDING in sheet
+                          StatusBadge = <span className="text-slate-400 flex items-center gap-1"><Activity className="w-3 h-3" /> Pendiente</span>;
+                        }
+                      }
+
+                      return (
+                        <tr key={i} className="hover:bg-slate-900/30 transition-colors">
+                          <td className="px-4 py-4 font-medium text-slate-300">{match.sport}</td>
+                          <td className="px-4 py-4 text-xs text-slate-500">
+                            {match.date} <br /> <span className="text-[10px] opacity-70">{match.time}</span>
+                          </td>
+                          <td className="px-4 py-4 text-slate-400">{match.match}</td>
+                          <td className="px-4 py-4 font-bold text-white">{match.pick}</td>
+                          <td className="px-4 py-4">
+                            <span className={`px-2 py-1 rounded text-xs font-bold ${parseInt(match.prob) > 75 ? 'bg-emerald-950 text-emerald-400 border border-emerald-500/30' : 'bg-blue-950 text-blue-400 border border-blue-500/30'
+                              }`}>
+                              {match.prob}
+                            </span>
+                          </td>
+                          <td className="px-4 py-4">
+                            {StatusBadge}
+                          </td>
+                        </tr>
+                      )
+                    })}
                   </tbody>
                 </table>
               </div>
