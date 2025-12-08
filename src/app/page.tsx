@@ -17,6 +17,7 @@ const LandingPage = () => {
   const statsRef = useRef<HTMLDivElement>(null);
 
   const [liveMatches, setLiveMatches] = useState<any[]>([]);
+  const [tickerMatches, setTickerMatches] = useState<any[]>([]);
   const [sportStats, setSportStats] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -132,13 +133,11 @@ const LandingPage = () => {
           return { sport: displayName, rate, total };
         });
 
-        // Filter for Yesterday's Matches and select ONE per sport
+        // 1. Filter for Yesterday's Matches (Table) - ONE per sport
         const yesterdaysMatchesAll = allMatches.filter(m => m.date === yesterdayStr);
-
-        // Group by sport to pick one representative (e.g. the last one / most recent)
         const yesterdaysMatchesBySport: Record<string, any> = {};
         yesterdaysMatchesAll.forEach(m => {
-          yesterdaysMatchesBySport[m.originalSport] = m; // Overwrite to keep the last one of the day
+          yesterdaysMatchesBySport[m.originalSport] = m;
         });
 
         const yesterdaysMatches = Object.values(yesterdaysMatchesBySport).map((m: any) => {
@@ -153,7 +152,22 @@ const LandingPage = () => {
           return { ...m, sport: displayName };
         });
 
+        // 2. Filter for Ticker (Latest 20 matches, recent first)
+        const latestMatchesRaw = allMatches.slice(-20).reverse(); // Get last 20 and flip
+        const latestMatches = latestMatchesRaw.map((m: any) => {
+          let displayName = m.originalSport;
+          if (m.originalSport === 'futbol') displayName = "⚽ Fútbol";
+          if (m.originalSport === 'hockey') displayName = "🏒 Hockey";
+          if (m.originalSport === 'tenis') displayName = "🎾 Tenis";
+          if (m.originalSport === 'nba' || m.originalSport === 'basket' || m.originalSport === 'basketball') displayName = "🏀 Basket";
+          if (m.originalSport === 'mma') displayName = "🥊 MMA";
+          if (m.originalSport === 'nfl' || m.originalSport === 'american_football') displayName = "🏈 NFL";
+
+          return { ...m, sport: displayName };
+        });
+
         setLiveMatches(yesterdaysMatches);
+        setTickerMatches(latestMatches);
         setSportStats(stats);
         setLoading(false);
 
@@ -314,12 +328,16 @@ const LandingPage = () => {
       {/* Live Ticker Section */}
       <div className="w-full bg-slate-900/50 border-y border-slate-800 overflow-hidden py-3">
         <div className="flex animate-marquee whitespace-nowrap gap-8 text-sm font-mono text-slate-300">
-          {(liveMatches.length > 0 ? [...liveMatches, ...liveMatches] : Array(10).fill({ sport: "Cargando...", match: "...", prob: "...", status: "..." })).map((match, i) => (
+          {(tickerMatches.length > 0 ? [...tickerMatches, ...tickerMatches] : Array(10).fill({ sport: "Cargando...", match: "...", prob: "...", status: "..." })).map((match, i) => (
             <div key={i} className="flex items-center gap-2">
               <span className="text-emerald-400">●</span>
               <span className="font-bold text-white">{match.sport}</span>: {match.match}
               <span className="bg-slate-800 px-2 py-0.5 rounded text-xs border border-slate-700">Prob: {match.prob}</span>
-              {match.status === 'WIN' && <span className="text-emerald-400 font-bold">GANADA ✅</span>}
+
+              {/* Ticker Status Badges */}
+              {(match.status === 'WIN') && <span className="text-emerald-400 font-bold flex items-center gap-1"><CheckCircle2 className="w-3 h-3" /> GANADA</span>}
+              {(match.status === 'LOSS') && <span className="text-red-400 font-bold flex items-center gap-1"><X className="w-3 h-3" /> PERDIDA</span>}
+              {(match.status === 'CANCELLED') && <span className="text-slate-400 font-bold flex items-center gap-1"><Activity className="w-3 h-3" /> CANCELADA</span>}
             </div>
           ))}
         </div>
