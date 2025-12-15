@@ -40,6 +40,31 @@ export interface ProfitabilityData {
   }[];
 }
 
+export interface SportProfitability {
+  sport: string;
+  totalBets: number;
+  totalWagered: number;
+  totalReturn: number;
+  netProfit: number;
+  yield: number;
+  wins: number;
+  losses: number;
+}
+
+export interface MonthlyProfitabilityData {
+  startDate: string;
+  endDate: string;
+  daysWithData: number;
+  sports: SportProfitability[];
+  totals: {
+    totalBets: number;
+    totalWagered: number;
+    totalReturn: number;
+    netProfit: number;
+    yield: number;
+  };
+}
+
 
 // Helper function to parse CSV line
 const parseCSVLine = (line: string): string[] => {
@@ -78,6 +103,7 @@ export function useMatchesData() {
   const [tickerMatches, setTickerMatches] = useState<MatchData[]>([]);
   const [sportStats, setSportStats] = useState<SportStat[]>([]);
   const [profitability, setProfitability] = useState<ProfitabilityData | null>(null);
+  const [monthlyProfitability, setMonthlyProfitability] = useState<MonthlyProfitabilityData | null>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -337,6 +363,89 @@ export function useMatchesData() {
             // No matches found, set null
             setProfitability(null);
           }
+
+          // ========== MONTHLY PROFITABILITY (Last 30 days, grouped by sport) ==========
+          // Calculate the date 30 days ago
+          const thirtyDaysAgo = new Date();
+          thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+          const thirtyDaysAgoStr = `${thirtyDaysAgo.getFullYear()}-${String(thirtyDaysAgo.getMonth() + 1).padStart(2, '0')}-${String(thirtyDaysAgo.getDate()).padStart(2, '0')}`;
+
+          // Filter rows for last 30 days (excluding today)
+          const monthlyRows = allProfitRows.filter(r => 
+            r.date >= thirtyDaysAgoStr && r.date < todayStr
+          );
+
+          if (monthlyRows.length > 0) {
+            // Group by sport
+            const sportMap: Record<string, {
+              bets: number;
+              wagered: number;
+              returned: number;
+              wins: number;
+              losses: number;
+            }> = {};
+
+            monthlyRows.forEach(row => {
+              const sportKey = row.sport;
+              if (!sportMap[sportKey]) {
+                sportMap[sportKey] = { bets: 0, wagered: 0, returned: 0, wins: 0, losses: 0 };
+              }
+              sportMap[sportKey].bets++;
+              sportMap[sportKey].wagered += row.investment;
+              sportMap[sportKey].returned += row.returnAmount;
+              if (row.status === 'WON') {
+                sportMap[sportKey].wins++;
+              } else {
+                sportMap[sportKey].losses++;
+              }
+            });
+
+            // Convert to SportProfitability array
+            const sportsData: SportProfitability[] = Object.entries(sportMap).map(([sport, data]) => {
+              const netProfit = data.returned - data.wagered;
+              const yieldPct = data.wagered > 0 ? Math.round((netProfit / data.wagered) * 10000) / 100 : 0;
+              return {
+                sport: getSportDisplayName(sport),
+                totalBets: data.bets,
+                totalWagered: data.wagered,
+                totalReturn: data.returned,
+                netProfit,
+                yield: yieldPct,
+                wins: data.wins,
+                losses: data.losses
+              };
+            });
+
+            // Sort by netProfit descending (best performing first)
+            sportsData.sort((a, b) => b.netProfit - a.netProfit);
+
+            // Calculate totals
+            const totalWagered = monthlyRows.reduce((acc, r) => acc + r.investment, 0);
+            const totalReturn = monthlyRows.reduce((acc, r) => acc + r.returnAmount, 0);
+            const totalNetProfit = totalReturn - totalWagered;
+            const totalYield = totalWagered > 0 ? Math.round((totalNetProfit / totalWagered) * 10000) / 100 : 0;
+
+            // Find date range
+            const monthlyDates = [...new Set(monthlyRows.map(r => r.date))].sort();
+            const startDate = monthlyDates[0];
+            const endDate = monthlyDates[monthlyDates.length - 1];
+
+            setMonthlyProfitability({
+              startDate,
+              endDate,
+              daysWithData: monthlyDates.length,
+              sports: sportsData,
+              totals: {
+                totalBets: monthlyRows.length,
+                totalWagered,
+                totalReturn,
+                netProfit: totalNetProfit,
+                yield: totalYield
+              }
+            });
+          } else {
+            setMonthlyProfitability(null);
+          }
         } catch (profitError) {
           console.error("Error fetching profitability data:", profitError);
           setProfitability(null);
@@ -353,5 +462,5 @@ export function useMatchesData() {
     fetchMatches();
   }, []);
 
-  return { liveMatches, tickerMatches, sportStats, profitability, loading };
+  return { liveMatches, tickerMatches, sportStats, profitability, monthlyProfitability, loading };
 }
