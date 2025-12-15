@@ -78,7 +78,7 @@ export default function ProfitabilitySection({ data, loading }: ProfitabilitySec
                     <div className="text-center mb-16">
                         <h2 className="text-3xl md:text-5xl font-bold mb-4">Simulación de Rentabilidad</h2>
                         <p className="text-slate-400 max-w-2xl mx-auto">
-                            No hay datos del día anterior disponibles para la simulación.
+                            No hay datos disponibles para la simulación de rentabilidad.
                         </p>
                     </div>
                 </div>
@@ -94,7 +94,7 @@ export default function ProfitabilitySection({ data, loading }: ProfitabilitySec
                 <div className="text-center mb-16">
                     <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-emerald-950/50 border border-emerald-500/30 text-emerald-400 text-sm font-medium mb-6">
                         <BarChart3 className="w-4 h-4" />
-                        Backtesting del día anterior
+                        Backtesting del último día publicado
                     </div>
                     <h2 className="text-3xl md:text-5xl font-bold mb-4">Simulación de Rentabilidad</h2>
                     <p className="text-slate-400 max-w-2xl mx-auto">

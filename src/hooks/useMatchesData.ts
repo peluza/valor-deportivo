@@ -94,11 +94,10 @@ export function useMatchesData() {
         const matchesBySport: Record<string, MatchData[]> = {};
         const allMatches: MatchData[] = [];
 
-        // Calculate Yesterday's Date
+        // We will find the latest date with data after processing all matches
+        // Use local timezone for consistent date comparison
         const today = new Date();
-        const yesterday = new Date(today);
-        yesterday.setDate(yesterday.getDate() - 1);
-        const yesterdayStr = yesterday.toISOString().split('T')[0];
+        const todayStr = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
 
         data.forEach(row => {
           if (row.length < 5) return;
@@ -178,32 +177,46 @@ export function useMatchesData() {
           return { sport: getSportDisplayName(sport), rate, total };
         });
 
-        // Filter for Yesterday's Matches (Table) - ONE per sport, only completed (WIN/LOSS)
-        const yesterdaysMatchesAll = allMatches.filter(m => m.date === yesterdayStr);
-        const yesterdaysMatchesBySport: Record<string, MatchData> = {};
-        yesterdaysMatchesAll
+        // Find the latest date with completed matches (not today)
+        // This ensures we always show data even if yesterday had no events
+        const completedMatches = allMatches.filter(m => 
+          m.status === 'WIN' || m.status === 'LOSS'
+        );
+        const uniqueDates = [...new Set(completedMatches.map(m => m.date))]
+          .filter(d => d < todayStr) // Only past dates (not today)
+          .sort((a, b) => b.localeCompare(a)); // Sort descending (most recent first)
+        
+        const latestDateWithData = uniqueDates.length > 0 ? uniqueDates[0] : null;
+
+        // Filter for Latest Date's Matches (Table) - ONE per sport, only completed (WIN/LOSS)
+        const latestDayMatchesAll = latestDateWithData 
+          ? allMatches.filter(m => m.date === latestDateWithData)
+          : [];
+        const latestDayMatchesBySport: Record<string, MatchData> = {};
+        latestDayMatchesAll
           .filter(m => m.status === 'WIN' || m.status === 'LOSS') // Only completed matches
           .forEach(m => {
             // Only keep first match per sport (not overwrite)
-            if (!yesterdaysMatchesBySport[m.originalSport]) {
-              yesterdaysMatchesBySport[m.originalSport] = m;
+            if (!latestDayMatchesBySport[m.originalSport]) {
+              latestDayMatchesBySport[m.originalSport] = m;
             }
           });
 
-        const yesterdaysMatches = Object.values(yesterdaysMatchesBySport).map((m) => ({
+        const latestDayMatches = Object.values(latestDayMatchesBySport).map((m) => ({
           ...m,
           sport: getSportDisplayName(m.originalSport)
         }));
 
-        // Filter for Ticker - Yesterday's completed matches only (WIN/LOSS)
-        const tickerMatchesRaw = allMatches
-          .filter(m => m.date === yesterdayStr && (m.status === 'WIN' || m.status === 'LOSS'));
+        // Filter for Ticker - Latest date's completed matches only (WIN/LOSS)
+        const tickerMatchesRaw = latestDateWithData
+          ? allMatches.filter(m => m.date === latestDateWithData && (m.status === 'WIN' || m.status === 'LOSS'))
+          : [];
         const latestMatches = tickerMatchesRaw.map((m) => ({
           ...m,
           sport: getSportDisplayName(m.originalSport)
         }));
 
-        setLiveMatches(yesterdaysMatches);
+        setLiveMatches(latestDayMatches);
         setTickerMatches(latestMatches);
         setSportStats(stats);
 
@@ -243,6 +256,21 @@ export function useMatchesData() {
           // Parse match data - detect by date pattern (YYYY-MM-DD)
           const datePattern = /^\d{4}-\d{2}-\d{2}$/;
           
+          // First, collect all valid dates from profitability data
+          const allProfitDates: string[] = [];
+          interface ProfitMatchRow {
+            date: string;
+            sport: string;
+            match: string;
+            strategy: string;
+            odds: number;
+            status: string;
+            investment: number;
+            returnAmount: number;
+            profit: number;
+          }
+          const allProfitRows: ProfitMatchRow[] = [];
+          
           profitLines.forEach((line) => {
             const cells = parseCSVLine(line);
             
@@ -250,49 +278,63 @@ export function useMatchesData() {
             if (cells.length < 9) return;
             if (!cells[0] || !datePattern.test(cells[0].trim())) return;
             
-            // Check if this is yesterday's data
-            const matchDate = cells[0].trim(); // Fecha
-            if (matchDate !== yesterdayStr) return;
+            const matchDate = cells[0].trim();
+            if (matchDate >= todayStr) return; // Skip today's matches
             
-            const sport = cells[1]; // Deporte
-            const match = cells[2]; // Partido
-            const strategy = cells[3]; // Estrategia
-            const odds = parseFloat(cells[4]) || 0; // Cuota (Odds)
-            const status = cells[5]; // Estado (WON/LOST)
-            const investment = parseFloat(cells[6]) || 0; // Inversión ($)
-            const returnAmount = parseFloat(cells[7]) || 0; // Retorno ($)
-            const profit = parseFloat(cells[8]) || 0; // Ganancia/Pérdida
-            
-            profitMatches.push({
-              sport: getSportDisplayName(sport),
-              match,
-              strategy: strategy.replace(/_/g, ' '),
-              odds,
-              result: status === 'WON' ? 'GANADA' : 'PERDIDA',
-              investment,
-              returnAmount,
-              profit
+            allProfitDates.push(matchDate);
+            allProfitRows.push({
+              date: matchDate,
+              sport: cells[1],
+              match: cells[2],
+              strategy: cells[3],
+              odds: parseFloat(cells[4]) || 0,
+              status: cells[5],
+              investment: parseFloat(cells[6]) || 0,
+              returnAmount: parseFloat(cells[7]) || 0,
+              profit: parseFloat(cells[8]) || 0
             });
           });
           
-          // Calculate totals from yesterday's matches if no summary found
-          if (profitMatches.length > 0) {
-            const yesterdayWagered = profitMatches.reduce((acc, m) => acc + m.investment, 0);
-            const yesterdayReturn = profitMatches.reduce((acc, m) => acc + m.returnAmount, 0);
-            const yesterdayProfit = yesterdayReturn - yesterdayWagered;
-            const yesterdayYield = yesterdayWagered > 0 ? Math.round((yesterdayProfit / yesterdayWagered) * 10000) / 100 : 0;
+          // Find the latest date with profitability data
+          const uniqueProfitDates = [...new Set(allProfitDates)].sort((a, b) => b.localeCompare(a));
+          const latestProfitDate = uniqueProfitDates.length > 0 ? uniqueProfitDates[0] : null;
+          
+          // Filter rows for the latest date
+          if (latestProfitDate) {
+            const latestRows = allProfitRows.filter(r => r.date === latestProfitDate);
+            
+            latestRows.forEach(row => {
+              profitMatches.push({
+                sport: getSportDisplayName(row.sport),
+                match: row.match,
+                strategy: row.strategy.replace(/_/g, ' '),
+                odds: row.odds,
+                result: row.status === 'WON' ? 'GANADA' : 'PERDIDA',
+                investment: row.investment,
+                returnAmount: row.returnAmount,
+                profit: row.profit
+              });
+            });
+          }
+          
+          // Calculate totals from latest day's matches
+          if (profitMatches.length > 0 && latestProfitDate) {
+            const latestWagered = profitMatches.reduce((acc, m) => acc + m.investment, 0);
+            const latestReturn = profitMatches.reduce((acc, m) => acc + m.returnAmount, 0);
+            const latestProfit = latestReturn - latestWagered;
+            const latestYield = latestWagered > 0 ? Math.round((latestProfit / latestWagered) * 10000) / 100 : 0;
             
             setProfitability({
-              date: yesterdayStr,
+              date: latestProfitDate,
               totalBets: profitMatches.length,
-              totalWagered: yesterdayWagered,
-              totalReturn: yesterdayReturn,
-              netProfit: yesterdayProfit,
-              yield: yesterdayYield,
+              totalWagered: latestWagered,
+              totalReturn: latestReturn,
+              netProfit: latestProfit,
+              yield: latestYield,
               matches: profitMatches
             });
           } else {
-            // No matches for yesterday, set null
+            // No matches found, set null
             setProfitability(null);
           }
         } catch (profitError) {
