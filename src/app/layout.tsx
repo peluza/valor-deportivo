@@ -8,6 +8,9 @@ const outfit = Outfit({ subsets: ["latin"], variable: "--font-display" });
 export const metadata: Metadata = {
   title: "Valor Deportivo | IA + Matemáticas",
   description: "Bot deportivo con inteligencia artificial y estrategia matemática.",
+  icons: {
+    icon: '/icon.svg',
+  },
 };
 
 export default function RootLayout({

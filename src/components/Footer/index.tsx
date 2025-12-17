@@ -8,7 +8,7 @@ export default function Footer() {
                     <Activity className="text-emerald-600 w-6 h-6" />
                     <span className="text-lg font-bold text-slate-500">Valor Deportivo Bot</span>
                 </div>
-                <p className="text-slate-600 text-sm">© 2024 Valor Deportivo. Apuesta responsablemente (+18).</p>
+                <p className="text-slate-600 text-sm">© 2025 Valor Deportivo. Apuesta responsablemente (+18).</p>
             </div>
         </footer>
     );
