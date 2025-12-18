@@ -109,29 +109,26 @@ export function useMatchesData() {
   useEffect(() => {
     const fetchMatches = async () => {
       try {
-        const sheetUrl = process.env.NEXT_PUBLIC_GOOGLE_SHEET_URL;
-        if (!sheetUrl) {
-          console.error("NEXT_PUBLIC_GOOGLE_SHEET_URL is missing");
-          setLoading(false);
-          return;
-        }
-        const response = await fetch(sheetUrl);
-        const text = await response.text();
-        const lines = text.split('\n').filter(l => l.trim());
+        const response = await fetch('/api/matches');
+        if (!response.ok) throw new Error('Failed to fetch from API');
+        
+        const { matches: matchesData, profitability: profitData } = await response.json();
 
-        // Skip header
-        const data = lines.slice(1).map(parseCSVLine);
+        // Process Match Data (matchesData is already array of arrays: string[][])
+        // data = matchesData
+        const data = matchesData;
 
         // Process data
         const matchesBySport: Record<string, MatchData[]> = {};
         const allMatches: MatchData[] = [];
 
+        // FROM HERE, LOGIC REMAINS MOSTLY THE SAME, BUT `data` IS ALREADY PARSED
         // We will find the latest date with data after processing all matches
         // Use local timezone for consistent date comparison
         const today = new Date();
         const todayStr = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
 
-        data.forEach(row => {
+        data.forEach((row: string[]) => {
           if (row.length < 5) return;
 
           const sport = row[1];
@@ -252,15 +249,10 @@ export function useMatchesData() {
         setTickerMatches(latestMatches);
         setSportStats(stats);
 
-        // Fetch REAL Profitability Data from Simulacion_Rentabilidad sheet
+        // Fetch REAL Profitability Data from API (parsed row arrays)
         try {
-          const profitResponse = await fetch('https://docs.google.com/spreadsheets/d/1MMfzYOEgcbYY-nEGiiXha8cFlBMX-Cv64DLGnoMFSYk/gviz/tq?tqx=out:csv&sheet=Simulacion_Rentabilidad');
-          const profitText = await profitResponse.text();
-          const profitLines = profitText.split('\n').filter(l => l.trim());
-          
-          // Find data rows (skip headers and summary rows)
-          // Based on sheet structure: Row 8+ has the actual match data
-          // Columns: A=Fecha, B=Deporte, C=Partido, D=Estrategia, E=Cuota, F=Estado, G=Inversión, H=Retorno, I=Ganancia/Pérdida
+          // profitData is array of arrays: string[][]
+          // process directly
           
           let totalApostado = 0;
           let totalRetorno = 0;
@@ -269,8 +261,9 @@ export function useMatchesData() {
           const profitMatches: ProfitabilityData['matches'] = [];
           
           // Parse summary from rows 3-6 (0-indexed: 2-5)
-          profitLines.forEach((line, idx) => {
-            const cells = parseCSVLine(line);
+          // profitData contains all rows including headers
+          
+          profitData.forEach((cells: string[], idx: number) => {
             if (cells[0] === 'Total Apostado ($):') {
               totalApostado = parseFloat(cells[1]) || 0;
             }
@@ -290,6 +283,7 @@ export function useMatchesData() {
           
           // First, collect all valid dates from profitability data
           const allProfitDates: string[] = [];
+          
           interface ProfitMatchRow {
             date: string;
             sport: string;
@@ -303,9 +297,7 @@ export function useMatchesData() {
           }
           const allProfitRows: ProfitMatchRow[] = [];
           
-          profitLines.forEach((line) => {
-            const cells = parseCSVLine(line);
-            
+          profitData.forEach((cells: string[]) => {
             // Skip if not enough columns or first cell isn't a date
             if (cells.length < 9) return;
             if (!cells[0] || !datePattern.test(cells[0].trim())) return;
