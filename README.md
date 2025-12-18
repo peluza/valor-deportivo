@@ -25,18 +25,36 @@ El proyecto está construido utilizando las últimas tecnologías para el desarr
 *   **Gráficos**: [Recharts](https://recharts.org/)
 *   **Iconos**: [Lucide React](https://lucide.dev/)
 
+
+**🔗 Demo en Vivo**: [https://vd.editech.dev](https://vd.editech.dev)
+
 ## 📂 Estructura del Proyecto
 
-El código fuente se encuentra principalmente en `src/`:
+El proyecto sigue una arquitectura modular basada en el App Router de Next.js:
 
-*   `src/app`: Rutas y páginas de la aplicación (Next.js App Router).
-*   `src/components`: Componentes reutilizables y secciones de la landing page.
-    *   `HeroSection`: Sección principal de bienvenida.
-    *   `StatsSection`: Métricas clave del servicio.
-    *   `CTASection`: Llamadas a la acción para conversión.
-    *   ... y más secciones específicas de negocio.
-*   `src/lib`: Utilidades y librerías auxiliares.
-*   `src/hooks`: Hooks personalizados de React.
+```
+web_apuestas_deportivas/
+├── public/                 # Archivos estáticos (imágenes, iconos, SVGs)
+├── src/
+│   ├── app/               # Rutas de navegación (Next.js App Router)
+│   │   ├── layout.tsx     # Layout principal de la aplicación
+│   │   └── page.tsx       # Página de inicio (Landing Page)
+│   ├── components/        # Componentes de UI y Secciones
+│   │   ├── CTASection/    # Llamadas a la acción
+│   │   ├── HeroSection/   # Sección principal (Above the fold)
+│   │   ├── LiveTicker/    # Cinta de resultados en tiempo real
+│   │   ├── Navbar/        # Barra de navegación
+│   │   ├── StatsSection/  # Visualización de métricas
+│   │   └── ...            # Otros componentes modulares
+│   ├── hooks/             # Custom Hooks (Lógica de negocio reutilizable)
+│   │   └── useMatchesData.ts # Lógica de obtención y procesado de datos
+│   └── lib/               # Utilidades y configuración
+│       └── utils.ts       # Funciones auxiliares (Tailwind merge, etc.)
+├── .env.local             # Variables de entorno (No incluido en repo)
+├── next.config.ts         # Configuración de Next.js
+├── tailwind.config.ts     # Configuración de estilos y diseño
+└── package.json           # Dependencias y scripts
+```
 
 ## 🔧 Instalación y Puesta en Marcha
 
@@ -72,3 +90,10 @@ Las contribuciones son bienvenidas. Por favor, asegúrate de utilizar `eslint` p
 ```bash
 npm run lint
 ```
+
+##  Licencia y Aviso Legal
+
+Este proyecto es de código abierto bajo la licencia **MIT**, diseñado principalmente como **pieza de portafolio** y demostración técnica.
+
+> [!IMPORTANT]
+> **Arquitectura Híbrida**: Este repositorio contiene exclusivamente el código fuente del **Frontend (Next.js Application)**. La lógica de negocio crítica, el **Motor Multialgoritmo**, y los bots de análisis operan en un entorno de servidor privado y propietario. La información mostrada en esta web se consume a través de endpoints seguros y hojas de datos enmascaradas.
