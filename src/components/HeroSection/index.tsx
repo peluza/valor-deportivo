@@ -46,7 +46,7 @@ export default function HeroSection({ onOpenModal }: HeroSectionProps) {
                 </h1>
 
                 <p className="text-xl text-slate-400 mb-10 max-w-2xl mx-auto leading-relaxed">
-                    Nuestro bot analiza miles de eventos usando el <strong>Patrón Strategy</strong>. Solo notificamos cuando la probabilidad matemática supera a la casa de apuestas.
+                    Nuestro bot analiza miles de eventos en tiempo real mediante un <strong>Motor Multialgoritmo</strong>. Solo notificamos cuando detectamos una <strong>Ineficiencia de Cuota</strong>: es decir, cuando la probabilidad matemática real es mayor a la que ofrece la casa de apuestas.
                 </p>
 
                 <div className="flex flex-col sm:flex-row justify-center gap-4">
