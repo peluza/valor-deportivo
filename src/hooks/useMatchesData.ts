@@ -109,7 +109,13 @@ export function useMatchesData() {
   useEffect(() => {
     const fetchMatches = async () => {
       try {
-        const response = await fetch('https://docs.google.com/spreadsheets/d/1MMfzYOEgcbYY-nEGiiXha8cFlBMX-Cv64DLGnoMFSYk/gviz/tq?tqx=out:csv&sheet=filtered_matches');
+        const sheetUrl = process.env.NEXT_PUBLIC_GOOGLE_SHEET_URL;
+        if (!sheetUrl) {
+          console.error("NEXT_PUBLIC_GOOGLE_SHEET_URL is missing");
+          setLoading(false);
+          return;
+        }
+        const response = await fetch(sheetUrl);
         const text = await response.text();
         const lines = text.split('\n').filter(l => l.trim());
 
