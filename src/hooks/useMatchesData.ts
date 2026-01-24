@@ -93,7 +93,8 @@ export function useMatchesData() {
   const [todayBets, setTodayBets] = useState<Bet[]>([]);
 
   // Activate notifications
-  useMatchNotifications(todayBets);
+  // Activate notifications - MOVED TO COMPONENT
+  // useMatchNotifications(todayBets);
 
   useEffect(() => {
     const fetchData = async () => {
@@ -266,6 +267,24 @@ export function useMatchesData() {
           setMonthlyProfitability(null);
         }
 
+        // --- Daily Predictions (Today's Pending) ---
+        const dailyPredictionsData = todayRows.map((r) => ({
+          originalSport: r.sport,
+          date: r.date,
+          time: r.time,
+          match: `${r.home_team} vs ${r.away_team}`,
+          pick: r.strategy,
+          prob: `${r.prob_1 || 0}%`,
+          status: mapStatus(r.status),
+          strategy: r.strategy,
+          league: r.league,
+          sport: getSportDisplayName(r.sport),
+          odds: r.odds,  // Ensure odds are passed
+          home_team: r.home_team,
+          away_team: r.away_team
+        }));
+
+
       } catch (err) {
         console.error("Error fetching match data:", err);
       } finally {
@@ -294,7 +313,74 @@ export function useMatchesData() {
 
   }, []);
 
-  return { liveMatches, tickerMatches, sportStats, profitability, monthlyProfitability, loading };
+  // Prepare dailyPredictions for return, mapping todayBets if needed, 
+  // but better to state variable if we want it calculated inside useEffect
+  // For now, let's derive it from todayBets since we set it in useEffect
+  const dailyPredictions = todayBets.map((r: any) => ({
+    originalSport: r.sport,
+    date: r.date,
+    time: r.time,
+    match: `${r.home_team} vs ${r.away_team}`,
+    pick: r.strategy,
+    prob: `${r.prob_1 || 0}%`,
+    status: mapStatus(r.status),
+    strategy: r.strategy,
+    league: r.league,
+    sport: getSportDisplayName(r.sport),
+    odds: r.odds
+  }));
+
+  // --- MOCK DATA FOR DEMOGRAPHICS (Iterative Design Phase) ---
+  // If no predictions today, show some mocks to demonstrate the UI
+  const displayPredictions = dailyPredictions.length > 0 ? dailyPredictions : [
+    {
+      originalSport: 'soccer',
+      date: new Date().toISOString().split('T')[0],
+      time: '20:45',
+      match: 'Real Madrid vs Barcelona',
+      pick: 'Over 2.5 Goals',
+      prob: '78%',
+      status: 'PENDING',
+      strategy: 'El Clásico Value',
+      league: 'La Liga',
+      sport: '⚽ Fútbol',
+      odds: 1.85,
+      home_team: 'Real Madrid',
+      away_team: 'Barcelona'
+    },
+    {
+      originalSport: 'nba',
+      date: new Date().toISOString().split('T')[0],
+      time: '22:00',
+      match: 'Lakers vs Warriors',
+      pick: 'Lakers -5.5',
+      prob: '65%',
+      status: 'PENDING',
+      strategy: 'NBA Trends',
+      league: 'NBA',
+      sport: '🏀 Basket',
+      odds: 1.90,
+      home_team: 'Lakers',
+      away_team: 'Warriors'
+    },
+    {
+      originalSport: 'tennis',
+      date: new Date().toISOString().split('T')[0],
+      time: '14:00',
+      match: 'Alcaraz vs Sinner',
+      pick: 'Alcaraz Win',
+      prob: '82%',
+      status: 'PENDING',
+      strategy: 'Grand Slam',
+      league: 'ATP',
+      sport: '🎾 Tenis',
+      odds: 1.72,
+      home_team: 'Alcaraz',
+      away_team: 'Sinner'
+    }
+  ];
+
+  return { liveMatches, tickerMatches, sportStats, profitability, monthlyProfitability, loading, dailyPredictions: displayPredictions, todayBets };
 }
 
 function mapStatus(status: string) {

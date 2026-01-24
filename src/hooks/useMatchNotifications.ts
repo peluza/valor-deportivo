@@ -3,7 +3,7 @@ import { useEffect, useRef } from 'react'
 import { toast } from 'sonner'
 import { Bet } from './useRealtimeBets'
 
-export function useMatchNotifications(bets: Bet[]) {
+export function useMatchNotifications(bets: Bet[], onOpenDetails?: (bet: any) => void) {
     const notifiedIds = useRef<Set<number>>(new Set())
 
     useEffect(() => {
@@ -30,7 +30,10 @@ export function useMatchNotifications(bets: Bet[]) {
                         duration: 10000, // 10 seconds
                         action: {
                             label: 'Ver',
-                            onClick: () => console.log('View match', bet.id)
+                            onClick: () => {
+                                console.log('View match', bet.id);
+                                if (onOpenDetails) onOpenDetails(bet);
+                            }
                         }
                     })
 
