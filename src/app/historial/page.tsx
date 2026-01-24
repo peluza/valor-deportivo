@@ -23,6 +23,7 @@ export default function HistoryPage() {
     // Selected Filters
     const [selectedSport, setSelectedSport] = useState<string>('all');
     const [selectedLeague, setSelectedLeague] = useState<string>('all');
+    const [selectedDate, setSelectedDate] = useState<string>('');
     const [selectedStrategy, setSelectedStrategy] = useState<string>('all');
     const [selectedStatus, setSelectedStatus] = useState<string>('all');
 
@@ -94,6 +95,9 @@ export default function HistoryPage() {
             if (selectedLeague !== 'all') {
                 query = query.eq('league', selectedLeague);
             }
+            if (selectedDate) {
+                query = query.eq('date', selectedDate);
+            }
             if (selectedStrategy !== 'all') {
                 query = query.eq('strategy', selectedStrategy);
             }
@@ -121,7 +125,7 @@ export default function HistoryPage() {
         } finally {
             setLoading(false);
         }
-    }, [selectedSport, selectedLeague, selectedStrategy, selectedStatus, currentPage]);
+    }, [selectedSport, selectedLeague, selectedDate, selectedStrategy, selectedStatus, currentPage]);
 
     // Trigger fetch when params change
     useEffect(() => {
@@ -131,7 +135,7 @@ export default function HistoryPage() {
     // Reset Page on Filter Change
     useEffect(() => {
         setCurrentPage(1);
-    }, [selectedSport, selectedLeague, selectedStrategy, selectedStatus]);
+    }, [selectedSport, selectedLeague, selectedDate, selectedStrategy, selectedStatus]);
 
     // Reset Strategy and League when Sport changes
     useEffect(() => {
@@ -142,6 +146,7 @@ export default function HistoryPage() {
     const handleReset = () => {
         setSelectedSport('all');
         setSelectedLeague('all');
+        setSelectedDate('');
         setSelectedStrategy('all');
         setSelectedStatus('all');
         setCurrentPage(1);
@@ -176,6 +181,8 @@ export default function HistoryPage() {
                     onSportChange={setSelectedSport}
                     selectedLeague={selectedLeague}
                     onLeagueChange={setSelectedLeague}
+                    selectedDate={selectedDate}
+                    onDateChange={setSelectedDate}
                     selectedStrategy={selectedStrategy}
                     onStrategyChange={setSelectedStrategy}
                     selectedStatus={selectedStatus}

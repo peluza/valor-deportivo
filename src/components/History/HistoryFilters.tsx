@@ -1,14 +1,21 @@
 'use client';
 
-import { Activity, Zap, Filter } from 'lucide-react';
+import { useState, useRef, useEffect } from 'react';
+
+import { Activity, Zap, Filter, Calendar as CalendarIcon, ChevronDown } from 'lucide-react';
 import { getSportDisplayName } from '@/hooks/useMatchesData';
 import { getStrategyName } from './constants';
+import { format } from 'date-fns';
+import { es } from 'date-fns/locale';
+import Calendar from './Calendar';
 
 interface HistoryFiltersProps {
     selectedSport: string;
     onSportChange: (v: string) => void;
     selectedLeague: string;
     onLeagueChange: (v: string) => void;
+    selectedDate: string;
+    onDateChange: (v: string) => void;
     selectedStrategy: string;
     onStrategyChange: (v: string) => void;
     selectedStatus: string;
@@ -24,6 +31,8 @@ export default function HistoryFilters({
     onSportChange,
     selectedLeague,
     onLeagueChange,
+    selectedDate,
+    onDateChange,
     selectedStrategy,
     onStrategyChange,
     selectedStatus,
@@ -33,8 +42,32 @@ export default function HistoryFilters({
     availableStrategies,
     onReset
 }: HistoryFiltersProps) {
+    const [showCalendar, setShowCalendar] = useState(false);
+    const calendarRef = useRef<HTMLDivElement>(null);
+
+    // Close calendar when clicking outside
+    useEffect(() => {
+        function handleClickOutside(event: MouseEvent) {
+            if (calendarRef.current && !calendarRef.current.contains(event.target as Node)) {
+                setShowCalendar(false);
+            }
+        }
+        if (showCalendar) {
+            document.addEventListener("mousedown", handleClickOutside);
+        }
+        return () => {
+            document.removeEventListener("mousedown", handleClickOutside);
+        };
+    }, [showCalendar]);
+
+    const handleDateSelect = (date: Date) => {
+        // Format to YYYY-MM-DD for consistency with parent state
+        onDateChange(format(date, 'yyyy-MM-dd'));
+        setShowCalendar(false);
+    };
+
     return (
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-4 bg-slate-900/40 p-6 rounded-xl border border-slate-800/50 backdrop-blur-sm">
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 bg-slate-900/40 p-6 rounded-xl border border-slate-800/50 backdrop-blur-sm">
 
             {/* Sport Filter */}
             <div className="space-y-2">
@@ -73,6 +106,33 @@ export default function HistoryFilters({
                         <option key={l} value={l}>{l.replace(/_/g, ' ')}</option>
                     ))}
                 </select>
+            </div>
+
+            {/* Date Filter */}
+            <div className="space-y-2">
+                <label className="text-xs font-semibold text-slate-500 uppercase tracking-wider flex items-center gap-2">
+                    <CalendarIcon className="w-3 h-3" /> Fecha
+                </label>
+                <div className="relative w-full" ref={calendarRef}>
+                    <button
+                        onClick={() => setShowCalendar(!showCalendar)}
+                        className={`w-full bg-slate-950 border rounded-lg px-4 py-2.5 text-sm flex items-center justify-between text-left transition-all
+                            ${showCalendar ? 'ring-2 ring-emerald-500/50 border-emerald-500' : 'border-slate-800 hover:border-slate-700'}`}
+                    >
+                        <span className={selectedDate ? 'text-white' : 'text-slate-400'}>
+                            {selectedDate ? format(new Date(selectedDate + 'T12:00:00'), 'PPP', { locale: es }) : 'Todas las Fechas'}
+                        </span>
+                        <CalendarIcon className="w-4 h-4 text-slate-500" />
+                    </button>
+
+                    {showCalendar && (
+                        <Calendar
+                            value={selectedDate ? new Date(selectedDate + 'T12:00:00') : null}
+                            onChange={handleDateSelect}
+                            onClose={() => setShowCalendar(false)}
+                        />
+                    )}
+                </div>
             </div>
 
             {/* Bet Type Filter */}
@@ -114,7 +174,7 @@ export default function HistoryFilters({
                 </select>
             </div>
 
-            <div className="flex items-end md:col-span-4">
+            <div className="flex items-end md:col-span-3">
                 <button
                     onClick={onReset}
                     className="w-full bg-slate-800 hover:bg-slate-700 text-slate-300 font-medium py-2.5 px-4 rounded-lg transition-colors text-sm"
