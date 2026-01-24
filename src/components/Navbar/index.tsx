@@ -10,15 +10,10 @@ export default function Navbar() {
                     <Activity className="text-emerald-400 w-8 h-8" />
                     <span className="text-xl font-bold tracking-tighter">VALOR <span className="text-emerald-400">DEPORTIVO</span></span>
                 </div>
-                <a
-                    href="https://t.me/+D6DgDcdEazY0ZDAx"
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="hidden md:flex items-center gap-2 bg-slate-800 hover:bg-slate-700 text-white px-5 py-2 rounded-full transition-all border border-slate-700 hover:border-emerald-500/50"
-                >
+                <div className="hidden md:flex items-center gap-2 bg-slate-900/50 border border-emerald-500/30 px-4 py-2 rounded-full select-none">
                     <Zap className="w-4 h-4 text-emerald-400" />
-                    Probar Gratis
-                </a>
+                    <span className="text-emerald-400 font-mono text-xs font-bold tracking-wider">BETA GRATUITA</span>
+                </div>
             </div>
         </nav>
     );

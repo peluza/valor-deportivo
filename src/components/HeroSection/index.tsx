@@ -50,21 +50,19 @@ export default function HeroSection({ onOpenModal }: HeroSectionProps) {
                 </p>
 
                 <div className="flex flex-col sm:flex-row justify-center gap-4">
-                    <a
-                        href="https://t.me/+D6DgDcdEazY0ZDAx"
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="group relative px-8 py-4 bg-emerald-500 text-slate-950 font-bold rounded-xl hover:bg-emerald-400 transition-all transform hover:scale-105 shadow-[0_0_20px_rgba(16,185,129,0.4)] flex items-center justify-center gap-2"
-                    >
-                        <Target className="w-5 h-5" />
-                        Probar Alertas Gratis
-                    </a>
                     <button
                         onClick={onOpenModal}
-                        className="px-8 py-4 bg-slate-900 text-white font-semibold rounded-xl border border-slate-700 hover:border-slate-500 transition-all flex items-center justify-center gap-2"
+                        className="group relative px-8 py-4 bg-emerald-500 text-slate-950 font-bold rounded-xl hover:bg-emerald-400 transition-all transform hover:scale-105 shadow-[0_0_20px_rgba(16,185,129,0.4)] flex items-center justify-center gap-2"
                     >
-                        <Lock className="w-5 h-5 text-slate-400" />
-                        Ver Planes Premium
+                        Ver Predicciones de Hoy
+                        {/* <ArrowRight size={20} className="group-hover:translate-x-1 transition-transform" /> */}
+                    </button>
+
+                    <button
+                        onClick={() => document.getElementById('historial')?.scrollIntoView({ behavior: 'smooth' })}
+                        className="px-8 py-4 rounded-xl font-bold text-white border border-slate-700 hover:bg-slate-800 transition-colors flex items-center justify-center gap-2"
+                    >
+                        Ver Historial
                     </button>
                 </div>
             </div>
