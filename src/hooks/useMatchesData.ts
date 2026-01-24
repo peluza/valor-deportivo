@@ -1,6 +1,10 @@
+
 'use client';
 
 import { useState, useEffect } from 'react';
+import { supabase } from '@/lib/supabaseClient';
+import { Bet } from './useRealtimeBets';
+import { useMatchNotifications } from './useMatchNotifications';
 
 export interface MatchData {
   originalSport: string;
@@ -65,36 +69,15 @@ export interface MonthlyProfitabilityData {
   };
 }
 
-
-// Helper function to parse CSV line
-const parseCSVLine = (line: string): string[] => {
-  const result = [];
-  let cell = '';
-  let quote = false;
-
-  for (let i = 0; i < line.length; i++) {
-    const char = line[i];
-    if (char === '"') {
-      quote = !quote;
-    } else if (char === ',' && !quote) {
-      result.push(cell);
-      cell = '';
-    } else {
-      cell += char;
-    }
-  }
-  result.push(cell);
-  return result.map(c => c.replace(/^"|"$/g, '').trim());
-};
-
 // Get display name for sport
 export const getSportDisplayName = (sport: string): string => {
-  if (sport === 'futbol') return "⚽ Fútbol";
-  if (sport === 'hockey') return "🏒 Hockey";
-  if (sport === 'tenis') return "🎾 Tenis";
-  if (sport === 'nba' || sport === 'basket' || sport === 'basketball') return "🏀 Basket";
-  if (sport === 'mma') return "🥊 MMA";
-  if (sport === 'nfl' || sport === 'american_football') return "🏈 NFL";
+  const s = sport.toLowerCase();
+  if (s === 'futbol' || s === 'football') return "⚽ Fútbol";
+  if (s === 'hockey') return "🏒 Hockey";
+  if (s === 'tenis' || s === 'tennis') return "🎾 Tenis";
+  if (s === 'nba' || s === 'basket' || s === 'basketball') return "🏀 Basket";
+  if (s === 'mma') return "🥊 MMA";
+  if (s === 'nfl' || s === 'american_football') return "🏈 NFL";
   return sport;
 };
 
@@ -106,359 +89,217 @@ export function useMatchesData() {
   const [monthlyProfitability, setMonthlyProfitability] = useState<MonthlyProfitabilityData | null>(null);
   const [loading, setLoading] = useState(true);
 
+  // Internal state for notifications usage
+  const [todayBets, setTodayBets] = useState<Bet[]>([]);
+
+  // Activate notifications
+  useMatchNotifications(todayBets);
+
   useEffect(() => {
-    const fetchMatches = async () => {
+    const fetchData = async () => {
+      setLoading(true);
       try {
-        const response = await fetch('/api/matches');
-        if (!response.ok) throw new Error('Failed to fetch from API');
-        
-        const { matches: matchesData, profitability: profitData } = await response.json();
+        const today = new Date().toISOString().split('T')[0];
 
-        // Process Match Data (matchesData is already array of arrays: string[][])
-        // data = matchesData
-        const data = matchesData;
+        // 1. Fetch ALL data (Filtered Matches)
+        // Optimization: In real prod, splitting active vs history queries is better.
+        // For now, we fetch all to calculate stats client-side same as before.
+        const { data: allRows, error } = await supabase
+          .from('filtered_matches')
+          .select('*')
+          .order('date', { ascending: false });
 
-        // Process data
-        const matchesBySport: Record<string, MatchData[]> = {};
-        const allMatches: MatchData[] = [];
+        if (error) throw error;
+        if (!allRows) return;
 
-        // FROM HERE, LOGIC REMAINS MOSTLY THE SAME, BUT `data` IS ALREADY PARSED
-        // We will find the latest date with data after processing all matches
-        // Use local timezone for consistent date comparison
-        const today = new Date();
-        const todayStr = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
+        // --- Process Live/Today Matches ---
+        const todayRows = allRows.filter((r) => r.date === today && r.status === 'PENDING');
+        setTodayBets(todayRows as unknown as Bet[]);
 
-        data.forEach((row: string[]) => {
-          if (row.length < 5) return;
+        // --- History Rows (Completed) ---
+        // Exclude today from history stats generally, or include if status is WON/LOST
+        const historyRows = allRows.filter((r) => r.status === 'WON' || r.status === 'LOST');
 
-          const sport = row[1];
-          const home = row[3];
-          const away = row[4];
-          const date = row[5];
-          const time = row[6];
-          const strategy = row[7];
-          const status = row[16];
+        // Find latest date with history
+        const uniqueDates = [...new Set(historyRows.map(r => r.date))].sort((a, b) => b.localeCompare(a));
+        const latestDate = uniqueDates.length > 0 ? uniqueDates[0] : null;
 
-          let pick = '';
-          let prob = '';
+        // --- Live Matches / Transparency Section (Show LATEST COMPLETED DAY or TODAY) ---
+        // If we want transparency to show RESULTS, use latestDate. 
+        // If we want it to show Live Feed, use today.
+        // The user screenshot shows "Resultados Verificables" with "Programado" (Scheduled), so it seems they want live/pending there.
+        // But the previous "Resultados Verificables" logic implied completed matches ("Sin Trucos, Solo Datos... registrada de forma inmutable").
+        // Let's stick to LATEST COMPLETED for "Resultados Verificables" (Transparency) to show proof of winning.
+        // AND use "Live Feed" component (BetsFeed.tsx) for today's bets.
 
-          // Detect pick based on strategy type
-          if (strategy.includes('OVER')) {
-            pick = 'Over 2.5';
-            prob = row[11];
-          } else if (strategy.includes('UNDER')) {
-            pick = 'Under 2.5';
-            prob = row[12];
-          } else if (strategy.includes('HOME') || strategy.includes('1X2') || strategy.includes('1X_')) {
-            // HOME strategies, 1X2, or 1X_ -> bet on home team
-            pick = home;
-            prob = row[8];
-          } else if (strategy.includes('AWAY')) {
-            pick = away;
-            prob = row[10];
-          } else if (strategy.includes('MONEYLINE')) {
-            // MONEYLINE strategies - determine by looking at which prob is higher
-            const homeProb = parseFloat(row[8]) || 0;
-            const awayProb = parseFloat(row[10]) || 0;
-            if (homeProb >= awayProb) {
-              pick = home;
-              prob = row[8];
-            } else {
-              pick = away;
-              prob = row[10];
-            }
-          } else {
-            // Skip matches with unrecognized strategies
-            return;
-          }
-          
-          // Skip if probability is empty, zero, or invalid
-          const probValue = parseFloat(prob) || 0;
-          if (probValue <= 0 || pick === '') {
-            return;
-          }
+        const transparentRows = latestDate ? historyRows.filter(r => r.date === latestDate) : [];
 
-          const matchObj: MatchData = {
-            originalSport: sport,
-            date,
-            time,
-            match: `${home} vs ${away}`,
-            pick,
-            prob: `${prob}%`,
-            status: status === 'WON' ? 'WIN' : status === 'LOST' ? 'LOSS' : status === 'CANCELLED' ? 'CANCELLED' : 'PENDING',
-            strategy: strategy.replace(/_/g, ' '),
-            league: row[2]
-          };
+        const transparencyMatches = transparentRows.map((r) => ({
+          originalSport: r.sport,
+          date: r.date,
+          time: r.time,
+          match: `${r.home_team} vs ${r.away_team}`,
+          pick: r.strategy,
+          prob: `${r.prob_1 || 0}%`,
+          status: mapStatus(r.status),
+          strategy: r.strategy,
+          league: r.league,
+          sport: getSportDisplayName(r.sport)
+        }));
+        setLiveMatches(transparencyMatches);
 
-          allMatches.push(matchObj);
 
-          if (!matchesBySport[sport]) matchesBySport[sport] = [];
-          matchesBySport[sport].push(matchObj);
+        // --- Ticker Matches ---
+        setTickerMatches(transparencyMatches);
+
+
+        // --- Sport Stats (All Time) ---
+        const statsBySport: Record<string, { total: number; wins: number }> = {};
+        historyRows.forEach(r => {
+          if (!statsBySport[r.sport]) statsBySport[r.sport] = { total: 0, wins: 0 };
+          statsBySport[r.sport].total++;
+          if (r.status === 'WON') statsBySport[r.sport].wins++;
         });
 
-        const stats: SportStat[] = Object.keys(matchesBySport).map(sport => {
-          const matches = matchesBySport[sport];
-          const completed = matches.filter(m => m.status === 'WIN' || m.status === 'LOSS');
-          const wins = completed.filter(m => m.status === 'WIN').length;
-          const total = completed.length;
-          const rate = total > 0 ? Math.round((wins / total) * 100) : 0;
+        const statsArray: SportStat[] = Object.entries(statsBySport).map(([sport, data]) => ({
+          sport: getSportDisplayName(sport),
+          total: data.total,
+          rate: data.total > 0 ? Math.round((data.wins / data.total) * 100) : 0
+        })).sort((a, b) => b.total - a.total);
+        setSportStats(statsArray);
 
-          return { sport: getSportDisplayName(sport), rate, total };
-        });
 
-        // Find the latest date with completed matches (not today)
-        // This ensures we always show data even if yesterday had no events
-        const completedMatches = allMatches.filter(m => 
-          m.status === 'WIN' || m.status === 'LOSS'
-        );
-        const uniqueDates = [...new Set(completedMatches.map(m => m.date))]
-          .filter(d => d < todayStr) // Only past dates (not today)
-          .sort((a, b) => b.localeCompare(a)); // Sort descending (most recent first)
-        
-        const latestDateWithData = uniqueDates.length > 0 ? uniqueDates[0] : null;
-
-        // Filter for Latest Date's Matches (Table) - ONE per sport, only completed (WIN/LOSS)
-        const latestDayMatchesAll = latestDateWithData 
-          ? allMatches.filter(m => m.date === latestDateWithData)
-          : [];
-        const latestDayMatchesBySport: Record<string, MatchData> = {};
-        latestDayMatchesAll
-          .filter(m => m.status === 'WIN' || m.status === 'LOSS') // Only completed matches
-          .forEach(m => {
-            // Only keep first match per sport (not overwrite)
-            if (!latestDayMatchesBySport[m.originalSport]) {
-              latestDayMatchesBySport[m.originalSport] = m;
-            }
+        // --- Daily Profitability (Latest Date) ---
+        if (latestDate) {
+          const latestRows = historyRows.filter(r => r.date === latestDate);
+          const profitMatches = latestRows.map(r => {
+            const investment = 100; // Assuming fixed unit
+            const ret = r.status === 'WON' ? investment * r.odds : 0;
+            return {
+              sport: getSportDisplayName(r.sport),
+              match: `${r.home_team} vs ${r.away_team}`,
+              strategy: r.strategy,
+              odds: r.odds,
+              result: r.status === 'WON' ? 'GANADA' : 'PERDIDA',
+              investment,
+              returnAmount: ret,
+              profit: ret - investment
+            };
           });
 
-        const latestDayMatches = Object.values(latestDayMatchesBySport).map((m) => ({
-          ...m,
-          sport: getSportDisplayName(m.originalSport)
-        }));
+          const totalWagered = profitMatches.reduce((sum, m) => sum + m.investment, 0);
+          const totalReturn = profitMatches.reduce((sum, m) => sum + m.returnAmount, 0);
 
-        // Filter for Ticker - Latest date's completed matches only (WIN/LOSS)
-        const tickerMatchesRaw = latestDateWithData
-          ? allMatches.filter(m => m.date === latestDateWithData && (m.status === 'WIN' || m.status === 'LOSS'))
-          : [];
-        const latestMatches = tickerMatchesRaw.map((m) => ({
-          ...m,
-          sport: getSportDisplayName(m.originalSport)
-        }));
-
-        setLiveMatches(latestDayMatches);
-        setTickerMatches(latestMatches);
-        setSportStats(stats);
-
-        // Fetch REAL Profitability Data from API (parsed row arrays)
-        try {
-          // profitData is array of arrays: string[][]
-          // process directly
-          
-          let totalApostado = 0;
-          let totalRetorno = 0;
-          let netProfit = 0;
-          let yieldPct = 0;
-          const profitMatches: ProfitabilityData['matches'] = [];
-          
-          // Parse summary from rows 3-6 (0-indexed: 2-5)
-          // profitData contains all rows including headers
-          
-          profitData.forEach((cells: string[], idx: number) => {
-            if (cells[0] === 'Total Apostado ($):') {
-              totalApostado = parseFloat(cells[1]) || 0;
-            }
-            if (cells[0] === 'Total Retorno ($):') {
-              totalRetorno = parseFloat(cells[1]) || 0;
-            }
-            if (cells[0] === 'Net Profit ($):') {
-              netProfit = parseFloat(cells[1]) || 0;
-            }
-            if (cells[0] === 'Yield / ROI (%):') {
-              yieldPct = parseFloat(cells[1]?.replace('%', '')) || 0;
-            }
+          setProfitability({
+            date: latestDate,
+            totalBets: profitMatches.length,
+            totalWagered,
+            totalReturn,
+            netProfit: totalReturn - totalWagered,
+            yield: totalWagered > 0 ? Math.round(((totalReturn - totalWagered) / totalWagered) * 10000) / 100 : 0,
+            matches: profitMatches
           });
-          
-          // Parse match data - detect by date pattern (YYYY-MM-DD)
-          const datePattern = /^\d{4}-\d{2}-\d{2}$/;
-          
-          // First, collect all valid dates from profitability data
-          const allProfitDates: string[] = [];
-          
-          interface ProfitMatchRow {
-            date: string;
-            sport: string;
-            match: string;
-            strategy: string;
-            odds: number;
-            status: string;
-            investment: number;
-            returnAmount: number;
-            profit: number;
-          }
-          const allProfitRows: ProfitMatchRow[] = [];
-          
-          profitData.forEach((cells: string[]) => {
-            // Skip if not enough columns or first cell isn't a date
-            if (cells.length < 9) return;
-            if (!cells[0] || !datePattern.test(cells[0].trim())) return;
-            
-            const matchDate = cells[0].trim();
-            if (matchDate >= todayStr) return; // Skip today's matches
-            
-            allProfitDates.push(matchDate);
-            allProfitRows.push({
-              date: matchDate,
-              sport: cells[1],
-              match: cells[2],
-              strategy: cells[3],
-              odds: parseFloat(cells[4]) || 0,
-              status: cells[5],
-              investment: parseFloat(cells[6]) || 0,
-              returnAmount: parseFloat(cells[7]) || 0,
-              profit: parseFloat(cells[8]) || 0
-            });
-          });
-          
-          // Find the latest date with profitability data
-          const uniqueProfitDates = [...new Set(allProfitDates)].sort((a, b) => b.localeCompare(a));
-          const latestProfitDate = uniqueProfitDates.length > 0 ? uniqueProfitDates[0] : null;
-          
-          // Filter rows for the latest date
-          if (latestProfitDate) {
-            const latestRows = allProfitRows.filter(r => r.date === latestProfitDate);
-            
-            latestRows.forEach(row => {
-              profitMatches.push({
-                sport: getSportDisplayName(row.sport),
-                match: row.match,
-                strategy: row.strategy.replace(/_/g, ' '),
-                odds: row.odds,
-                result: row.status === 'WON' ? 'GANADA' : 'PERDIDA',
-                investment: row.investment,
-                returnAmount: row.returnAmount,
-                profit: row.profit
-              });
-            });
-          }
-          
-          // Calculate totals from latest day's matches
-          if (profitMatches.length > 0 && latestProfitDate) {
-            const latestWagered = profitMatches.reduce((acc, m) => acc + m.investment, 0);
-            const latestReturn = profitMatches.reduce((acc, m) => acc + m.returnAmount, 0);
-            const latestProfit = latestReturn - latestWagered;
-            const latestYield = latestWagered > 0 ? Math.round((latestProfit / latestWagered) * 10000) / 100 : 0;
-            
-            setProfitability({
-              date: latestProfitDate,
-              totalBets: profitMatches.length,
-              totalWagered: latestWagered,
-              totalReturn: latestReturn,
-              netProfit: latestProfit,
-              yield: latestYield,
-              matches: profitMatches
-            });
-          } else {
-            // No matches found, set null
-            setProfitability(null);
-          }
-
-          // ========== MONTHLY PROFITABILITY (Last 30 days, grouped by sport) ==========
-          // Calculate the date 30 days ago
-          const thirtyDaysAgo = new Date();
-          thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
-          const thirtyDaysAgoStr = `${thirtyDaysAgo.getFullYear()}-${String(thirtyDaysAgo.getMonth() + 1).padStart(2, '0')}-${String(thirtyDaysAgo.getDate()).padStart(2, '0')}`;
-
-          // Filter rows for last 30 days (excluding today)
-          const monthlyRows = allProfitRows.filter(r => 
-            r.date >= thirtyDaysAgoStr && r.date < todayStr
-          );
-
-          if (monthlyRows.length > 0) {
-            // Group by sport
-            const sportMap: Record<string, {
-              bets: number;
-              wagered: number;
-              returned: number;
-              wins: number;
-              losses: number;
-            }> = {};
-
-            monthlyRows.forEach(row => {
-              const sportKey = row.sport;
-              if (!sportMap[sportKey]) {
-                sportMap[sportKey] = { bets: 0, wagered: 0, returned: 0, wins: 0, losses: 0 };
-              }
-              sportMap[sportKey].bets++;
-              sportMap[sportKey].wagered += row.investment;
-              sportMap[sportKey].returned += row.returnAmount;
-              if (row.status === 'WON') {
-                sportMap[sportKey].wins++;
-              } else {
-                sportMap[sportKey].losses++;
-              }
-            });
-
-            // Convert to SportProfitability array
-            const sportsData: SportProfitability[] = Object.entries(sportMap).map(([sport, data]) => {
-              const netProfit = data.returned - data.wagered;
-              const yieldPct = data.wagered > 0 ? Math.round((netProfit / data.wagered) * 10000) / 100 : 0;
-              return {
-                sport: getSportDisplayName(sport),
-                totalBets: data.bets,
-                totalWagered: data.wagered,
-                totalReturn: data.returned,
-                netProfit,
-                yield: yieldPct,
-                wins: data.wins,
-                losses: data.losses
-              };
-            });
-
-            // Sort by netProfit descending (best performing first)
-            sportsData.sort((a, b) => b.netProfit - a.netProfit);
-
-            // Calculate totals
-            const totalWagered = monthlyRows.reduce((acc, r) => acc + r.investment, 0);
-            const totalReturn = monthlyRows.reduce((acc, r) => acc + r.returnAmount, 0);
-            const totalNetProfit = totalReturn - totalWagered;
-            const totalYield = totalWagered > 0 ? Math.round((totalNetProfit / totalWagered) * 10000) / 100 : 0;
-
-            // Find date range
-            const monthlyDates = [...new Set(monthlyRows.map(r => r.date))].sort();
-            const startDate = monthlyDates[0];
-            const endDate = monthlyDates[monthlyDates.length - 1];
-
-            setMonthlyProfitability({
-              startDate,
-              endDate,
-              daysWithData: monthlyDates.length,
-              sports: sportsData,
-              totals: {
-                totalBets: monthlyRows.length,
-                totalWagered,
-                totalReturn,
-                netProfit: totalNetProfit,
-                yield: totalYield
-              }
-            });
-          } else {
-            setMonthlyProfitability(null);
-          }
-        } catch (profitError) {
-          console.error("Error fetching profitability data:", profitError);
-          setProfitability(null);
         }
 
-        setLoading(false);
+        // --- Monthly Profitability (Last 30 Days) ---
+        const thirtyDaysAgo = new Date();
+        thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+        const thirtyDaysAgoStr = thirtyDaysAgo.toISOString().split('T')[0];
 
-      } catch (error) {
-        console.error("Error fetching matches:", error);
+        // Filter rows for last 30 days excluding today (or including if you want live monthly stats)
+        // Usually stats are for closed periods or "running"
+        const monthlyRows = historyRows.filter(r => r.date >= thirtyDaysAgoStr && r.date <= today && (r.status === 'WON' || r.status === 'LOST'));
+
+        if (monthlyRows.length > 0) {
+          // Group by sport
+          const sportMap: Record<string, { bets: number; wagered: number; returned: number; wins: number; losses: number }> = {};
+
+          for (const r of monthlyRows) {
+            const sportKey = r.sport;
+            if (!sportMap[sportKey]) sportMap[sportKey] = { bets: 0, wagered: 0, returned: 0, wins: 0, losses: 0 };
+
+            const investment = 100;
+            const ret = r.status === 'WON' ? investment * r.odds : 0;
+
+            sportMap[sportKey].bets++;
+            sportMap[sportKey].wagered += investment;
+            sportMap[sportKey].returned += ret;
+            if (r.status === 'WON') sportMap[sportKey].wins++;
+            else sportMap[sportKey].losses++;
+          }
+
+          const sportsData: SportProfitability[] = Object.entries(sportMap).map(([sport, data]) => {
+            const netProfit = data.returned - data.wagered;
+            return {
+              sport: getSportDisplayName(sport),
+              totalBets: data.bets,
+              totalWagered: data.wagered,
+              totalReturn: data.returned,
+              netProfit: netProfit,
+              yield: data.wagered > 0 ? Math.round((netProfit / data.wagered) * 10000) / 100 : 0,
+              wins: data.wins,
+              losses: data.losses
+            };
+          }).sort((a, b) => b.netProfit - a.netProfit);
+
+          // Calculate totals
+          const totalWagered = monthlyRows.reduce((acc, r) => acc + 100, 0);
+          const totalReturn = monthlyRows.reduce((acc, r) => acc + (r.status === 'WON' ? 100 * r.odds : 0), 0);
+          const netProfit = totalReturn - totalWagered;
+
+          const monthlyDates = [...new Set(monthlyRows.map(r => r.date))].sort();
+
+          setMonthlyProfitability({
+            startDate: monthlyDates[0],
+            endDate: monthlyDates[monthlyDates.length - 1],
+            daysWithData: monthlyDates.length,
+            sports: sportsData,
+            totals: {
+              totalBets: monthlyRows.length,
+              totalWagered,
+              totalReturn,
+              netProfit: netProfit,
+              yield: totalWagered > 0 ? Math.round((netProfit / totalWagered) * 10000) / 100 : 0
+            }
+          });
+        } else {
+          setMonthlyProfitability(null);
+        }
+
+      } catch (err) {
+        console.error("Error fetching match data:", err);
+      } finally {
         setLoading(false);
       }
     };
 
-    fetchMatches();
+    fetchData();
+
+    // Realtime Subscription
+    const channel = supabase
+      .channel('public:filtered_matches:main')
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'filtered_matches' },
+        (payload) => {
+          console.log('Realtime update:', payload);
+          fetchData();
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+
   }, []);
 
   return { liveMatches, tickerMatches, sportStats, profitability, monthlyProfitability, loading };
+}
+
+function mapStatus(status: string) {
+  if (status === 'WON') return 'WIN';
+  if (status === 'LOST') return 'LOSS';
+  if (status === 'VOID') return 'CANCELLED';
+  return 'PENDING';
 }
