@@ -18,9 +18,11 @@ export default function HistoryPage() {
     // Filter Logic States
     const [uniqueSports, setUniqueSports] = useState<string[]>([]);
     const [strategyMap, setStrategyMap] = useState<Record<string, string[]>>({}); // sport -> strategies
+    const [leagueMap, setLeagueMap] = useState<Record<string, string[]>>({}); // sport -> leagues
 
     // Selected Filters
     const [selectedSport, setSelectedSport] = useState<string>('all');
+    const [selectedLeague, setSelectedLeague] = useState<string>('all');
     const [selectedStrategy, setSelectedStrategy] = useState<string>('all');
     const [selectedStatus, setSelectedStatus] = useState<string>('all');
 
@@ -36,18 +38,23 @@ export default function HistoryPage() {
                 // Fetch only necessary columns to build filters
                 const { data, error } = await supabase
                     .from('filtered_matches')
-                    .select('sport, strategy');
+                    .select('sport, strategy, league');
 
                 if (error) throw error;
 
                 if (data) {
                     const sports = new Set<string>();
                     const sMap: Record<string, Set<string>> = {};
+                    const lMap: Record<string, Set<string>> = {};
 
                     data.forEach((row: any) => {
                         sports.add(row.sport);
+
                         if (!sMap[row.sport]) sMap[row.sport] = new Set();
                         sMap[row.sport].add(row.strategy);
+
+                        if (!lMap[row.sport]) lMap[row.sport] = new Set();
+                        lMap[row.sport].add(row.league);
                     });
 
                     setUniqueSports(Array.from(sports));
@@ -57,6 +64,12 @@ export default function HistoryPage() {
                         finalSMap[k] = Array.from(sMap[k]);
                     });
                     setStrategyMap(finalSMap);
+
+                    const finalLMap: Record<string, string[]> = {};
+                    Object.keys(lMap).forEach(k => {
+                        finalLMap[k] = Array.from(lMap[k]);
+                    });
+                    setLeagueMap(finalLMap);
                 }
             } catch (err) {
                 console.error("Error fetching metadata:", err);
@@ -77,6 +90,9 @@ export default function HistoryPage() {
             // Apply Filters
             if (selectedSport !== 'all') {
                 query = query.eq('sport', selectedSport);
+            }
+            if (selectedLeague !== 'all') {
+                query = query.eq('league', selectedLeague);
             }
             if (selectedStrategy !== 'all') {
                 query = query.eq('strategy', selectedStrategy);
@@ -105,7 +121,7 @@ export default function HistoryPage() {
         } finally {
             setLoading(false);
         }
-    }, [selectedSport, selectedStrategy, selectedStatus, currentPage]);
+    }, [selectedSport, selectedLeague, selectedStrategy, selectedStatus, currentPage]);
 
     // Trigger fetch when params change
     useEffect(() => {
@@ -115,22 +131,25 @@ export default function HistoryPage() {
     // Reset Page on Filter Change
     useEffect(() => {
         setCurrentPage(1);
-    }, [selectedSport, selectedStrategy, selectedStatus]);
+    }, [selectedSport, selectedLeague, selectedStrategy, selectedStatus]);
 
-    // Reset Strategy when Sport changes
+    // Reset Strategy and League when Sport changes
     useEffect(() => {
         setSelectedStrategy('all');
+        setSelectedLeague('all');
     }, [selectedSport]);
 
     const handleReset = () => {
         setSelectedSport('all');
+        setSelectedLeague('all');
         setSelectedStrategy('all');
         setSelectedStatus('all');
         setCurrentPage(1);
     };
 
-    // Get available strategies for current sport
+    // Get available strategies and leagues for current sport
     const availableStrategies = selectedSport === 'all' ? [] : (strategyMap[selectedSport] || []);
+    const availableLeagues = selectedSport === 'all' ? [] : (leagueMap[selectedSport] || []);
 
     return (
         <div className="min-h-screen bg-slate-950 text-slate-200 pt-24 pb-12 px-4 md:px-8">
@@ -155,11 +174,14 @@ export default function HistoryPage() {
                 <HistoryFilters
                     selectedSport={selectedSport}
                     onSportChange={setSelectedSport}
+                    selectedLeague={selectedLeague}
+                    onLeagueChange={setSelectedLeague}
                     selectedStrategy={selectedStrategy}
                     onStrategyChange={setSelectedStrategy}
                     selectedStatus={selectedStatus}
                     onStatusChange={setSelectedStatus}
                     uniqueSports={uniqueSports}
+                    uniqueLeagues={availableLeagues}
                     availableStrategies={availableStrategies}
                     onReset={handleReset}
                 />

@@ -7,11 +7,14 @@ import { getStrategyName } from './constants';
 interface HistoryFiltersProps {
     selectedSport: string;
     onSportChange: (v: string) => void;
+    selectedLeague: string;
+    onLeagueChange: (v: string) => void;
     selectedStrategy: string;
     onStrategyChange: (v: string) => void;
     selectedStatus: string;
     onStatusChange: (v: string) => void;
     uniqueSports: string[];
+    uniqueLeagues: string[];
     availableStrategies: string[];
     onReset: () => void;
 }
@@ -19,11 +22,14 @@ interface HistoryFiltersProps {
 export default function HistoryFilters({
     selectedSport,
     onSportChange,
+    selectedLeague,
+    onLeagueChange,
     selectedStrategy,
     onStrategyChange,
     selectedStatus,
     onStatusChange,
     uniqueSports,
+    uniqueLeagues,
     availableStrategies,
     onReset
 }: HistoryFiltersProps) {
@@ -43,6 +49,28 @@ export default function HistoryFilters({
                     <option value="all">Todos los Deportes</option>
                     {uniqueSports.map(s => (
                         <option key={s} value={s}>{getSportDisplayName(s)}</option>
+                    ))}
+                </select>
+            </div>
+
+            {/* League Filter */}
+            <div className="space-y-2">
+                <label className={`text-xs font-semibold uppercase tracking-wider flex items-center gap-2 ${selectedSport === 'all' ? 'text-slate-600' : 'text-slate-500'}`}>
+                    <Filter className="w-3 h-3" /> Liga
+                </label>
+                <select
+                    value={selectedLeague}
+                    onChange={(e) => onLeagueChange(e.target.value)}
+                    disabled={selectedSport === 'all'}
+                    className={`w-full border rounded-lg px-4 py-2.5 text-sm outline-none transition-all appearance-none
+                        ${selectedSport === 'all'
+                            ? 'bg-slate-900/50 border-slate-800 text-slate-600 cursor-not-allowed'
+                            : 'bg-slate-950 border-slate-800 text-white focus:ring-2 focus:ring-emerald-500/50 focus:border-emerald-500 shadow-lg'
+                        }`}
+                >
+                    <option value="all">Todas las Ligas</option>
+                    {uniqueLeagues.map(l => (
+                        <option key={l} value={l}>{l.replace(/_/g, ' ')}</option>
                     ))}
                 </select>
             </div>
@@ -86,7 +114,7 @@ export default function HistoryFilters({
                 </select>
             </div>
 
-            <div className="flex items-end">
+            <div className="flex items-end md:col-span-4">
                 <button
                     onClick={onReset}
                     className="w-full bg-slate-800 hover:bg-slate-700 text-slate-300 font-medium py-2.5 px-4 rounded-lg transition-colors text-sm"
