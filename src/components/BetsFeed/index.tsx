@@ -2,8 +2,8 @@
 'use client'
 
 import React from 'react'
-import { useRealtimeBets } from '../hooks/useRealtimeBets'
-import { useMatchNotifications } from '../hooks/useMatchNotifications'
+import { useRealtimeBets } from '@/hooks/useRealtimeBets'
+import { useMatchNotifications } from '@/hooks/useMatchNotifications'
 import { Trophy, TrendingUp, Clock, Zap } from 'lucide-react'
 
 // Premium Card Component
@@ -11,8 +11,8 @@ const BetCard = ({ bet }: { bet: any }) => (
     <div className="relative group bg-zinc-900/50 hover:bg-zinc-800/80 backdrop-blur-md border border-white/5 rounded-2xl p-6 transition-all duration-300 hover:scale-[1.02] hover:shadow-xl hover:shadow-indigo-500/10">
         <div className="absolute top-0 right-0 p-4">
             <span className={`inline-flex items-center px-3 py-1 rounded-full text-xs font-semibold ${bet.status === 'PENDING' ? 'bg-yellow-500/10 text-yellow-500' :
-                    bet.status === 'WON' ? 'bg-green-500/10 text-green-500' :
-                        'bg-red-500/10 text-red-500'
+                bet.status === 'WON' ? 'bg-green-500/10 text-green-500' :
+                    'bg-red-500/10 text-red-500'
                 }`}>
                 {bet.status}
             </span>
