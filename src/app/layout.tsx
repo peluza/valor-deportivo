@@ -14,6 +14,10 @@ export const metadata: Metadata = {
   },
 };
 
+import Navbar from "@/components/Navbar";
+
+// ... existing imports
+
 export default function RootLayout({
   children,
 }: Readonly<{
@@ -23,6 +27,7 @@ export default function RootLayout({
     <html lang="es" className={`${inter.variable} ${outfit.variable}`}>
       <body className="antialiased font-sans bg-slate-950 text-white">
         <NotificationToast />
+        <Navbar />
         {children}
       </body>
     </html>

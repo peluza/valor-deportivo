@@ -3,7 +3,7 @@
 import { useState } from 'react';
 import { useMatchesData } from '@/hooks/useMatchesData';
 
-import Navbar from '@/components/Navbar';
+
 import HeroSection from '@/components/HeroSection';
 import LiveTicker from '@/components/LiveTicker';
 import StatsSection from '@/components/StatsSection';
@@ -38,7 +38,6 @@ export default function LandingPage() {
 
   return (
     <div className="min-h-screen bg-slate-950 text-white font-sans selection:bg-emerald-500 selection:text-black overflow-x-hidden">
-      <Navbar />
       <HeroSection onOpenModal={() => {
         // Scroll to Daily Predictions instead of Modal
         document.getElementById('daily-predictions')?.scrollIntoView({ behavior: 'smooth' });
